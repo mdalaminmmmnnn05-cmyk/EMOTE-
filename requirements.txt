@@ -9,3 +9,4 @@ protobuf-decoder
 google-play-scraper
 psutil
 PyJWT
+aiohttp
