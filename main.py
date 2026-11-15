@@ -10,8 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-# ─── এখানে আপনার লগইন মডিউলটির নাম দিন ───
-# যদি আপনার লগইন ফাইলের নাম login_core.py হয়:
+# ─── আপনার মডিউলগুলো ───
 from login_core import do_login 
 from xC4 import Emote_k, JoinSquadByTeamCode
 
@@ -21,9 +20,8 @@ app = FastAPI(title="RAFIN TxT Emote Web")
 #              ★ কনফিগারেশন ★
 # ═══════════════════════════════════════════════════════════════
 
-# ⚠️ নিরাপত্তার জন্য পাসওয়ার্ড সরাসরি কোডে না রেখে Render-এর Environment Variables-এ রাখুন
-BOT_UID      = os.getenv("BOT_UID", "8457240655")
-BOT_PASSWORD = os.getenv("BOT_PASSWORD", "5c131298d384fb6873713e199e80bb2600993f370f1b1618f70f391417723483")
+BOT_UID      = os.getenv("BOT_UID", "8417289000")
+BOT_PASSWORD = os.getenv("BOT_PASSWORD", "3DDDDBA6F79C8D2897A5EA02E4D85AA50B6714E597E354A4E4C32CBCF788BBE5")
 BOT_REGION   = os.getenv("BOT_REGION", "BD")
 
 _SESSION = {"data": None, "ts": 0}
