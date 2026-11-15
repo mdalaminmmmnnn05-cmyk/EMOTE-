@@ -11,7 +11,6 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
 # ─── আপনার মডিউলগুলো ───
-# যেহেতু আপনি নতুন লগইন কোড বানিয়েছেন, তাই login_engine থেকে ইম্পোর্ট করুন
 from login_engine import do_login 
 from xC4 import Emote_k, JoinSquadByTeamCode
 
@@ -24,7 +23,7 @@ app = FastAPI(title="RAFIN TxT Emote Web")
 # Render-এর Environment Variables থেকে ভ্যালু নেবে, না থাকলে ডিফল্ট ব্যবহার করবে
 BOT_UID      = os.getenv("BOT_UID", "8437458863")
 BOT_PASSWORD = os.getenv("BOT_PASSWORD", "99A4B0B655293F4F087B5ECC22084DCC7475677E929868FB89549F326F9FFBE1")
-BOT_REGION   = os.getenv("BOT_REGION", "BD") # আপনার বটের রিজিয়ন (BD, IND, PK) দিন
+BOT_REGION   = os.getenv("BOT_REGION", "BD") 
 
 _SESSION = {"data": None, "ts": 0}
 
@@ -37,7 +36,6 @@ async def get_bot_session():
     if _SESSION["data"] and (now - _SESSION["ts"] < 5 * 3600):
         return _SESSION["data"]
 
-    # লগইন ইঞ্জিন কল করা হচ্ছে
     result = await do_login(BOT_UID, BOT_PASSWORD, BOT_REGION)
     if not result:
         raise HTTPException(500, "বট লগইন ব্যর্থ — UID/Password অথবা Region ভুল হতে পারে")
@@ -272,24 +270,20 @@ async def send_emote(
         raise HTTPException(400, "ইমোট ID শুধু সংখ্যা হবে")
 
     try:
-        # ১. বট লগইন
         sess = await get_bot_session()
 
-        # ২. টিম কোডে জয়েন করার প্যাকেট
         join_pkt = await JoinSquadByTeamCode(
             team_code, sess["key"], sess["iv"], sess["region"]
         )
 
-        # ৩. ইমোট প্যাকেট (এখানে সব ডেটা টাইপ ঠিক করা হয়েছে)
         emote_pkt = await Emote_k(
-            int(target_uid),
-            int(emote_id),
+            target_uid,
+            emote_id,
             sess["key"],
             sess["iv"],
             sess["region"],
         )
 
-        # ৪. TCP দিয়ে সার্ভারে পাঠানো
         ok, msg = await send_packets_tcp(
             sess,
             [join_pkt, emote_pkt],

@@ -1,18 +1,172 @@
-import asyncio
-import random
+# ═══════════════════════════════════════════════════════════════
+#              ★ PREMIUM BOT CORE — BY RAFIN TxT ★
+#              ▌ Free Fire OB55 TCP Bot Engine ▌
+# ═══════════════════════════════════════════════════════════════
+
+import requests
+import json
+import binascii
 import time
+import urllib3
+import base64
+import datetime
+import re
+import socket
+import threading
+import random
+import os
+import asyncio
+
+from protobuf_decoder.protobuf_decoder import Parser
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
+from datetime import datetime
+from google.protobuf.timestamp_pb2 import Timestamp
 
-# ... (আপনার অন্যান্য কোড যেমন EnC_Uid, EnC_Vr, CrEaTe_ProTo, GeneRaTePk ইত্যাদি থাকবে) ...
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ═══════════════════════════════════════════════════════════════
-#              ★ Emote & Squad Functions ★
+#              ★ গ্লোবাল ভেরিয়েবল ★
+# ═══════════════════════════════════════════════════════════════
+
+bot_uid = None
+ToKen   = None
+region  = None
+
+# ═══════════════════════════════════════════════════════════════
+#              ★ AES কী ও IV ★
+# ═══════════════════════════════════════════════════════════════
+
+Key = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
+Iv  = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
+
+# ═══════════════════════════════════════════════════════════════
+#                    ★ AES এনক্রিপশন ইউটিল ★
+# ═══════════════════════════════════════════════════════════════
+
+async def EnC_AEs(HeX):
+    cipher = AES.new(Key, AES.MODE_CBC, Iv)
+    return cipher.encrypt(pad(bytes.fromhex(HeX), AES.block_size)).hex()
+
+async def DEc_AEs(HeX):
+    cipher = AES.new(Key, AES.MODE_CBC, Iv)
+    return unpad(cipher.decrypt(bytes.fromhex(HeX)), AES.block_size).hex()
+
+async def EnC_PacKeT(HeX, K, V):
+    return AES.new(K, AES.MODE_CBC, V).encrypt(pad(bytes.fromhex(HeX), 16)).hex()
+
+async def DEc_PacKeT(HeX, K, V):
+    return unpad(AES.new(K, AES.MODE_CBC, V).decrypt(bytes.fromhex(HeX)), 16).hex()
+
+# ═══════════════════════════════════════════════════════════════
+#              ★ UID / Varint এনকোড-ডিকোড ★
+# ═══════════════════════════════════════════════════════════════
+
+async def EnC_Uid(H, Tp):
+    e, H = [], int(H)
+    while H:
+        e.append((H & 0x7F) | (0x80 if H > 0x7F else 0))
+        H >>= 7
+    return bytes(e).hex() if Tp == 'Uid' else None
+
+async def EnC_Vr(N):
+    if N < 0:
+        return b''
+    H = []
+    while True:
+        BesTo = N & 0x7F
+        N >>= 7
+        if N:
+            BesTo |= 0x80
+        H.append(BesTo)
+        if not N:
+            break
+    return bytes(H)
+
+def DEc_Uid(H):
+    n = s = 0
+    for b in bytes.fromhex(H):
+        n |= (b & 0x7F) << s
+        if not b & 0x80:
+            break
+        s += 7
+    return n
+
+# ═══════════════════════════════════════════════════════════════
+#              ★ Protobuf ফিল্ড তৈরি ★
+# ═══════════════════════════════════════════════════════════════
+
+async def CrEaTe_VarianT(field_number, value):
+    field_header = (field_number << 3) | 0
+    return await EnC_Vr(field_header) + await EnC_Vr(value)
+
+async def CrEaTe_LenGTh(field_number, value):
+    field_header = (field_number << 3) | 2
+    encoded_value = value.encode() if isinstance(value, str) else value
+    return await EnC_Vr(field_header) + await EnC_Vr(len(encoded_value)) + encoded_value
+
+async def CrEaTe_ProTo(fields):
+    packet = bytearray()
+    for field, value in fields.items():
+        if isinstance(value, dict):
+            nested_packet = await CrEaTe_ProTo(value)
+            packet.extend(await CrEaTe_LenGTh(field, nested_packet))
+        elif isinstance(value, int):
+            packet.extend(await CrEaTe_VarianT(field, value))
+        elif isinstance(value, str) or isinstance(value, bytes):
+            packet.extend(await CrEaTe_LenGTh(field, value))
+    return packet
+
+# ═══════════════════════════════════════════════════════════════
+#              ★ হেক্স ডিকোডার ★
+# ═══════════════════════════════════════════════════════════════
+
+async def DecodE_HeX(H):
+    R = hex(H)
+    F = str(R)[2:]
+    if len(F) == 1:
+        F = "0" + F
+        return F
+    else:
+        return F
+
+# ═══════════════════════════════════════════════════════════════
+#              ★ মূল প্যাকেট জেনারেটর ★
+# ═══════════════════════════════════════════════════════════════
+
+async def GeneRaTePk(Pk, N, K, V):
+    PkEnc = await EnC_PacKeT(Pk, K, V)
+    _ = await DecodE_HeX(int(len(PkEnc) // 2))
+    if len(_) == 2:
+        HeadEr = N + "000000"
+    elif len(_) == 3:
+        HeadEr = N + "00000"
+    elif len(_) == 4:
+        HeadEr = N + "0000"
+    elif len(_) == 5:
+        HeadEr = N + "000"
+    else:
+        print('ErroR => GeneRatinG ThE PacKeT !!')
+        return None
+    return bytes.fromhex(HeadEr + _ + PkEnc)
+
+# ═══════════════════════════════════════════════════════════════
+#              ★ ইমোট প্যাকেট (async) ★
 # ═══════════════════════════════════════════════════════════════
 
 async def Emote_k(TarGeT, idT, K, V, region):
-    """ইমোট প্যাকেট"""
-    fields = {1: 21, 2: {1: 804266360, 2: 909000001, 5: {1: TarGeT, 3: idT}}}
+    """ইমোট প্যাকেট তৈরি করে"""
+    fields = {
+        1: 21, 
+        2: {
+            1: 804266360, 
+            2: 909000001, 
+            5: {
+                1: int(TarGeT), 
+                3: int(idT)
+            }
+        }
+    }
     if region.lower() == "ind":
         packet = '0514'
     elif region.lower() == "bd":
@@ -20,6 +174,10 @@ async def Emote_k(TarGeT, idT, K, V, region):
     else:
         packet = "0515"
     return await GeneRaTePk((await CrEaTe_ProTo(fields)).hex(), packet, K, V)
+
+# ═══════════════════════════════════════════════════════════════
+#              ★ টিম কোড দিয়ে স্কোয়াড জয়েন (async) ★
+# ═══════════════════════════════════════════════════════════════
 
 async def JoinSquadByTeamCode(team_code, K, V, region):
     """টিম কোড দিয়ে সরাসরি স্কোয়াডে জয়েন"""
