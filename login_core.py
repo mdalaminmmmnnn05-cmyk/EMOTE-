@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════
-#   RAFIN TxT — LOGIN CORE & UTILS
+#   RAFIN TxT — LOGIN CORE & UTILS (No Pb2 Version)
 # ═══════════════════════════════════════════════════════════════
 
 import asyncio
@@ -7,33 +7,17 @@ import random
 import json
 import os
 import time
-import sys
 import uuid
 from datetime import datetime
 
-import aiohttp
 import httpx
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+from Crypto.Util.Padding import pad
 from google_play_scraper import app as play_scraper
 from protobuf_decoder.protobuf_decoder import Parser
-
-# ─── আপনার Protobuf মডিউল (শুধু প্রয়োজনীয় ৩টি) ───
-try:
-    from Pb2 import (
-        MajoRLoGinrEs_pb2,
-        PorTs_pb2,
-        MajoRLoGinrEq_pb2,
-    )
-except ImportError:
-    print("Warning: Pb2 ফোল্ডার পাওয়া যায়নি! মেজর লগইন কাজ করবে না।")
-
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ═══════════════════════════════════════════════════════════════
-#                    ★ GLOBALS ★
-# ═══════════════════════════════════════════════════════════════
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 AES_KEY = b'Yg&tc%DEuh6%Zc^8'
 AES_IV  = b'6oyZDr22E3ychjM%'
@@ -57,7 +41,7 @@ DEFAULT_HEADERS = {
 }
 
 # ═══════════════════════════════════════════════════════════════
-#              ★ Protobuf হেল্পার ★
+#              ★ Protobuf ম্যানুয়াল হেল্পার (pb2 ছাড়া) ★
 # ═══════════════════════════════════════════════════════════════
 
 def _pb_varint(n):
@@ -74,20 +58,14 @@ def _pb_varint(n):
             break
     return bytes(out)
 
-def _pb_tag(f, w):
-    return _pb_varint((f << 3) | w)
-
 def _pb_field(f, v):
-    if isinstance(v, bool):
-        v = int(v)
     if isinstance(v, int):
-        return _pb_tag(f, 0) + _pb_varint(v)
+        return _pb_varint((f << 3) | 0) + _pb_varint(v)
     if isinstance(v, str):
         d = v.encode('utf-8')
-        return _pb_tag(f, 2) + _pb_varint(len(d)) + d
-    if isinstance(v, (bytes, bytearray)):
-        d = bytes(v)
-        return _pb_tag(f, 2) + _pb_varint(len(d)) + d
+        return _pb_varint((f << 3) | 2) + _pb_varint(len(d)) + d
+    if isinstance(v, bytes):
+        return _pb_varint((f << 3) | 2) + _pb_varint(len(v)) + v
     return b""
 
 def get_proto_field(d, key, default=None):
@@ -116,20 +94,6 @@ async def parse_results(parsed_results):
     return result_dict
 
 # ═══════════════════════════════════════════════════════════════
-#              ★ AES হেল্পার ★
-# ═══════════════════════════════════════════════════════════════
-
-async def aes_encrypt(payload, key, iv):
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    return cipher.encrypt(pad(payload, AES.block_size))
-
-async def encrypt_packet(packet_hex, key, iv):
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    packet_bytes = bytes.fromhex(packet_hex)
-    padded_packet = pad(packet_bytes, AES.block_size)
-    return cipher.encrypt(padded_packet).hex()
-
-# ═══════════════════════════════════════════════════════════════
 #              ★ LOGIN ENGINE ★
 # ═══════════════════════════════════════════════════════════════
 
@@ -137,8 +101,7 @@ async def get_playstore_version():
     loop = asyncio.get_event_loop()
     try:
         res = await loop.run_in_executor(
-            None,
-            lambda: play_scraper('com.dts.freefireth', lang='hi', country='id'),
+            None, lambda: play_scraper('com.dts.freefireth', lang='hi', country='id')
         )
         return res.get("version", "1.132.8")
     except Exception:
@@ -193,77 +156,79 @@ async def get_access_token(client_http, uid, password):
 
 async def build_majorlogin_payload(open_id, access_token, platform, client_version):
     try:
-        proto = MajoRLoGinrEq_pb2.MajorLogin()
-        proto.event_time = str(datetime.now())[:-7]
-        proto.game_name = "free fire"
-        proto.platform_id = 1
-        proto.client_version = str(client_version)
-        proto.client_version_code = "2019121229"
-        proto.system_software = "Android OS 15 / API-35 (AP3A.240905.015.A2/185014)"
-        proto.system_hardware = "Handheld"
-        proto.device_type = "Handheld"
-        proto.screen_width = 1600
-        proto.screen_height = 719
-        proto.screen_dpi = "234"
-        proto.processor_details = "ARM64 FP ASIMD AES | 1820 | 8"
-        proto.memory = 2798
-        proto.gpu_renderer = "Mali-G57"
-        proto.gpu_version = "OpenGL ES 3.2 v1.r49p1-04eac0.2848c17a2fd4e9340e06555168eaa3c9"
-        proto.unique_device_id = f"Google|{str(uuid.uuid4())}"
-        proto.client_ip = f"{random.randint(103,223)}.{random.randint(10,250)}.{random.randint(10,250)}.{random.randint(10,250)}"
-        proto.language = "hi"
-        proto.open_id = str(open_id)
-        proto.open_id_type = "4"
-        proto.login_open_id_type = 4
-        proto.access_token = str(access_token)
-        proto.login_by = 2
-        proto.platform_sdk_id = 1
-        proto.origin_platform_type = "4"
-        proto.primary_platform_type = "4"
-        proto.reg_avatar = 1
-        proto.channel_type = 3
-        proto.telecom_operator = "JIO"
-        proto.network_operator_a = "JIO"
-        proto.network_type = "WIFI"
-        proto.network_type_a = "WIFI"
-        proto.cpu_type = 2
-        proto.cpu_architecture = "64"
-        proto.graphics_api = "OpenGLES2"
-        proto.supported_astc_bitset = 8191
-        proto.client_using_version = "7428b253defc164018c604a1ebbfebdf"
-        proto.loading_time = 15078
-        proto.release_channel = "android"
-        proto.extra_info = "KqsHTx3+QOmBRR1WKvaWewlcpqJBfjki+PPHQoQG8+0yV+Uos7gUFFjHMQ/e7u6han6Fl77r7c3vMN3p8UbKgN+nfycQCgwBmWgBzomx2gj84c+p"
-        proto.android_engine_init_flag = 111207
-        proto.if_push = 1
-        proto.is_vpn = 0
-        proto.memory_available.version = 55
-        proto.memory_available.hidden_value = 81
-        proto.external_storage_total = 49973
-        proto.external_storage_available = 11338
-        proto.internal_storage_total = 854
-        proto.internal_storage_available = 11466
-        proto.game_disk_storage_total = 49973
-        proto.game_disk_storage_available = 11466
-        proto.external_sdcard_total_storage = 49973
-        proto.external_sdcard_avail_storage = 11466
-        proto.library_path = "/data/app/~~lHFxTCCbupG2QVJmsURtZw==/com.dts.freefireth-N3aCHpHNXpdxjD80uIIbww==/lib/arm64"
-        proto.library_token = "b8e0cd5e295eee42f5860d3c86e483dd|/data/app/~~lHFxTCCbupG2QVJmsURtZw==/com.dts.freefireth-N3aCHpHNXpdxjD80uIIbww==/base.apk"
+        # ম্যানুয়ালি MajorLoginReq তৈরি করা হচ্ছে (pb2 ছাড়া)
+        base = b""
+        base += _pb_field(3, str(datetime.now())[:-7])
+        base += _pb_field(4, "free fire")
+        base += _pb_field(5, 1)
+        base += _pb_field(7, str(client_version))
+        base += _pb_field(8, "Android OS 15 / API-35 (AP3A.240905.015.A2/185014)")
+        base += _pb_field(9, "Handheld")
+        base += _pb_field(10, "JIO")
+        base += _pb_field(11, "WIFI")
+        base += _pb_field(12, 1600)
+        base += _pb_field(13, 719)
+        base += _pb_field(14, "234")
+        base += _pb_field(15, "ARM64 FP ASIMD AES | 1820 | 8")
+        base += _pb_field(16, 2798)
+        base += _pb_field(17, "Mali-G57")
+        base += _pb_field(18, "OpenGL ES 3.2 v1.r49p1-04eac0.2848c17a2fd4e9340e06555168eaa3c9")
+        base += _pb_field(19, f"Google|{str(uuid.uuid4())}")
+        base += _pb_field(20, f"{random.randint(103,223)}.{random.randint(10,250)}.{random.randint(10,250)}.{random.randint(10,250)}")
+        base += _pb_field(21, "hi")
+        base += _pb_field(22, str(open_id))
+        base += _pb_field(23, "4")
+        base += _pb_field(24, "Handheld")
+        
+        # Nested field 25 (memory_available)
+        nested = _pb_field(6, 55) + _pb_field(8, 81)
+        base += _pb_field(25, nested)
+        
+        base += _pb_field(29, str(access_token))
+        base += _pb_field(30, 1)
+        base += _pb_field(41, "JIO")
+        base += _pb_field(42, "WIFI")
+        base += _pb_field(57, "7428b253defc164018c604a1ebbfebdf")
+        base += _pb_field(60, 49973)
+        base += _pb_field(61, 11338)
+        base += _pb_field(62, 854)
+        base += _pb_field(63, 11466)
+        base += _pb_field(64, 11466)
+        base += _pb_field(65, 49973)
+        base += _pb_field(66, 11466)
+        base += _pb_field(67, 49973)
+        base += _pb_field(73, 2)
+        base += _pb_field(74, "/data/app/~~lHFxTCCbupG2QVJmsURtZw==/com.dts.freefireth-N3aCHpHNXpdxjD80uIIbww==/lib/arm64")
+        base += _pb_field(76, 1)
+        base += _pb_field(77, "b8e0cd5e295eee42f5860d3c86e483dd|/data/app/~~lHFxTCCbupG2QVJmsURtZw==/com.dts.freefireth-N3aCHpHNXpdxjD80uIIbww==/base.apk")
+        base += _pb_field(78, 3)
+        base += _pb_field(79, 2)
+        base += _pb_field(81, "64")
+        base += _pb_field(83, "2019121229")
+        base += _pb_field(86, "OpenGLES2")
+        base += _pb_field(87, 8191)
+        base += _pb_field(88, 4)
+        base += _pb_field(92, 15078)
+        base += _pb_field(93, "android")
+        base += _pb_field(94, "KqsHTx3+QOmBRR1WKvaWewlcpqJBfjki+PPHQoQG8+0yV+Uos7gUFFjHMQ/e7u6han6Fl77r7c3vMN3p8UbKgN+nfycQCgwBmWgBzomx2gj84c+p")
+        base += _pb_field(95, 111207)
+        base += _pb_field(97, 1)
+        base += _pb_field(98, 0)
+        base += _pb_field(99, "4")
+        base += _pb_field(100, "4")
+        
+        # Extra fields
+        base += _pb_field(96, '{"cur_rate":[90,60,120],"support_etc2":false}')
+        base += _pb_field(97, 1)
+        base += _pb_field(99, "4")
+        base += _pb_field(100, "4")
+        base += _pb_field(102, b"\x17]ENWU\x0eR5")
+        base += _pb_field(104, 52882)
+        base += _pb_field(105, 1)
+        base += _pb_field(106, "https://dl.ak.freefiremobile.com/live/ABHotUpdates/|https://core-ak.freefiremobile.com/live/ABHotUpdates/|6b2078db9d22dd98f8e9386a39af8462")
+        base += _pb_field(107, "c8e41b7a93f02d56e1a94c7b8203f5d1")
 
-        base_payload = proto.SerializeToString()
-
-        extra = b""
-        extra += _pb_field(96, '{"cur_rate":[90,60,120],"support_etc2":false}')
-        extra += _pb_field(97, 1)
-        extra += _pb_field(99, "4")
-        extra += _pb_field(100, "4")
-        extra += _pb_field(102, b"\x17]ENWU\x0eR5")
-        extra += _pb_field(104, 52882)
-        extra += _pb_field(105, 1)
-        extra += _pb_field(106, "https://dl.ak.freefiremobile.com/live/ABHotUpdates/|https://core-ak.freefiremobile.com/live/ABHotUpdates/|6b2078db9d22dd98f8e9386a39af8462")
-        extra += _pb_field(107, "c8e41b7a93f02d56e1a94c7b8203f5d1")
-
-        return await aes_encrypt(base_payload + extra, AES_KEY, AES_IV)
+        return AES.new(AES_KEY, AES.MODE_CBC, AES_IV).encrypt(pad(base, 16))
     except Exception as e:
         print(f"Error in payload: {e}")
         return None
@@ -273,33 +238,21 @@ async def send_majorlogin(client_http, data, release_version, server_url):
         url = f"{server_url}MajorLogin" if server_url.endswith('/') else f"{server_url}/MajorLogin"
         req_headers = DEFAULT_HEADERS.copy()
         req_headers["ReleaseVersion"] = str(release_version)
-
         response = await client_http.post(url, headers=req_headers, data=data)
         if response.status_code != 200 or len(response.content) < 40:
             return None
-
-        res_proto = MajoRLoGinrEs_pb2.MajorLoginRes()
-        try:
-            res_proto.ParseFromString(response.content)
-        except Exception:
-            pass
-
-        if not (res_proto.account_uid and res_proto.token):
-            for offset in range(min(128, len(response.content))):
-                try:
-                    cc = MajoRLoGinrEs_pb2.MajorLoginRes()
-                    cc.ParseFromString(response.content[offset:])
-                    if cc.account_uid and cc.token:
-                        res_proto = cc
-                        break
-                except Exception:
-                    pass
-
+        
         parsed = Parser().parse(response.content.hex())
         dict_res = await parse_results(parsed)
 
-        key_val = get_proto_field(dict_res, 22) or res_proto.key or AES_KEY
-        iv_val  = get_proto_field(dict_res, 23) or res_proto.iv  or AES_IV
+        # ম্যানুয়ালি ডেটা বের করা
+        account_uid = get_proto_field(dict_res, 1)
+        region = get_proto_field(dict_res, 2)
+        token = get_proto_field(dict_res, 8)
+        url = get_proto_field(dict_res, 10)
+        timestamp = get_proto_field(dict_res, 21, int(time.time()))
+        key_val = get_proto_field(dict_res, 22) or AES_KEY
+        iv_val = get_proto_field(dict_res, 23) or AES_IV
 
         if isinstance(key_val, str):
             try: key_val = bytes.fromhex(key_val)
@@ -308,11 +261,15 @@ async def send_majorlogin(client_http, data, release_version, server_url):
             try: iv_val = bytes.fromhex(iv_val)
             except Exception: pass
 
-        res_proto.key = key_val
-        res_proto.iv  = iv_val
-        if not res_proto.url:
-            res_proto.url = server_url
-        return res_proto
+        return {
+            "account_uid": account_uid,
+            "region": region,
+            "token": token,
+            "url": url or server_url,
+            "timestamp": timestamp,
+            "key": key_val,
+            "iv": iv_val
+        }
     except Exception as e:
         print(f"MajorLogin error: {e}")
         return None
@@ -328,22 +285,15 @@ async def send_getlogin(client_http, data, base_url, token, release_version):
         if response.status_code != 200:
             return None
 
-        res_proto = PorTs_pb2.GetLoginData()
-        try:
-            res_proto.ParseFromString(response.content)
-        except Exception:
-            pass
-
         parsed = Parser().parse(response.content.hex())
         dict_res = await parse_results(parsed)
-        return res_proto, dict_res
+        return dict_res
     except Exception as e:
         print(f"GetLoginData error: {e}")
         return None
 
 async def do_login(uid, password, region_pref="IND"):
     async with httpx.AsyncClient(verify=False, timeout=15.0) as client_http:
-        print(f"[NET] ভার্সন কনফিগারেশন আনা হচ্ছে ...")
         vc = await version_config(client_http, region_pref)
         if not vc:
             print("[ERROR] ভার্সন কনফিগ ব্যর্থ হয়েছে।")
@@ -351,7 +301,6 @@ async def do_login(uid, password, region_pref="IND"):
         release_version, client_version, server_url = vc
         print(f"[OK] ভার্সন : {client_version} │ রিলিজ : {release_version}")
 
-        print(f"[NET] অ্যাক্সেস টোকেন আনা হচ্ছে ...")
         tg = await get_access_token(client_http, uid, password)
         if not tg:
             print("[ERROR] UID বা পাসওয়ার্ড ভুল — অ্যাক্সেস টোকেন পাওয়া যায়নি।")
@@ -359,52 +308,49 @@ async def do_login(uid, password, region_pref="IND"):
         open_id, access_token, platform = tg
         print("[OK] অ্যাক্সেস টোকেন সফলভাবে পাওয়া গেছে।")
 
-        print("[INFO] MajorLogin পেলোড তৈরি হচ্ছে ...")
         payload = await build_majorlogin_payload(open_id, access_token, platform, client_version)
         if not payload:
             print("[ERROR] পেলোড তৈরি ব্যর্থ হয়েছে।")
             return None
 
-        print("[NET] MajorLogin রিকোয়েস্ট পাঠানো হচ্ছে ...")
         major_res = await send_majorlogin(client_http, payload, release_version, server_url)
-        if not major_res or not major_res.account_uid:
+        if not major_res or not major_res.get("account_uid"):
             print("[ERROR] MajorLogin সার্ভার দ্বারা প্রত্যাখ্যাত হয়েছে।")
             return None
-        print(f"[OK] অ্যাকাউন্ট UID গৃহীত : {major_res.account_uid}")
+        print(f"[OK] অ্যাকাউন্ট UID গৃহীত : {major_res['account_uid']}")
 
-        print("[NET] GetLoginData রিকোয়েস্ট পাঠানো হচ্ছে ...")
-        gl = await send_getlogin(client_http, payload, major_res.url, major_res.token, release_version)
+        gl = await send_getlogin(client_http, payload, major_res["url"], major_res["token"], release_version)
         if not gl:
             print("[ERROR] GetLoginData ব্যর্থ হয়েছে।")
             return None
-        res_proto, dict_res = gl
+        dict_res = gl
         print("[OK] লগইন তথ্য সফলভাবে গৃহীত হয়েছে।")
 
-        online_addr = res_proto.Online_IP_Port or get_proto_field(dict_res, 14, "0.0.0.0:0")
-        if ':' in online_addr:
-            online_ip, online_port = online_addr.split(":")
+        online_addr = get_proto_field(dict_res, 14, "0.0.0.0:0")
+        if ':' in str(online_addr):
+            online_ip, online_port = str(online_addr).split(":")
         else:
             online_ip, online_port = "0.0.0.0", "0"
 
-        chat_addr = res_proto.AccountIP_Port or get_proto_field(dict_res, 32, online_addr)
-        if ':' in chat_addr:
-            chat_ip, chat_port = chat_addr.split(":")
+        chat_addr = get_proto_field(dict_res, 32, online_addr)
+        if ':' in str(chat_addr):
+            chat_ip, chat_port = str(chat_addr).split(":")
         else:
             chat_ip, chat_port = online_ip, online_port
 
         return {
-            "bot_uid":      str(major_res.account_uid),
-            "token":        major_res.token,
-            "region":       major_res.region or region_pref,
-            "key":          major_res.key or AES_KEY,
-            "iv":           major_res.iv or AES_IV,
-            "timestamp":    getattr(major_res, 'timestamp', int(time.time())),
+            "bot_uid":      str(major_res["account_uid"]),
+            "token":        major_res["token"],
+            "region":       major_res["region"] or region_pref,
+            "key":          major_res["key"],
+            "iv":           major_res["iv"],
+            "timestamp":    major_res["timestamp"],
             "online_ip":    online_ip,
             "online_port":  online_port,
             "chat_ip":      chat_ip,
             "chat_port":    chat_port,
-            "account_name": res_proto.AccountName or "Unknown",
-            "clan_id":      res_proto.Clan_ID or 0,
-            "clan_data":    res_proto.Clan_Compiled_Data or "",
-            "server_url":   major_res.url,
+            "account_name": get_proto_field(dict_res, 1, "Unknown"),
+            "clan_id":      get_proto_field(dict_res, 2, 0),
+            "clan_data":    get_proto_field(dict_res, 3, ""),
+            "server_url":   major_res["url"],
         }
