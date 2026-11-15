@@ -5,3 +5,7 @@ pycryptodome
 httpx
 requests
 protobuf
+protobuf-decoder
+google-play-scraper
+psutil
+PyJWT
