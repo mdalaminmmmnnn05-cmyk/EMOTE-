@@ -240,8 +240,8 @@ async def do_login(uid, password, region_pref="IND"):
 #              ★ ওয়েবসাইট কনফিগারেশন ★
 # ═══════════════════════════════════════════════════════════════
 
-BOT_UID = os.getenv("BOT_UID", "8457240655")
-BOT_PASSWORD = os.getenv("BOT_PASSWORD", "5c131298d384fb6873713e199e80bb2600993f370f1b1618f70f391417723483")
+BOT_UID = os.getenv("BOT_UID", "8437458863")
+BOT_PASSWORD = os.getenv("BOT_PASSWORD", "99A4B0B655293F4F087B5ECC22084DCC7475677E929868FB89549F326F9FFBE1")
 BOT_REGION = os.getenv("BOT_REGION", "BD")
 _SESSION = {"data": None, "ts": 0}
 
