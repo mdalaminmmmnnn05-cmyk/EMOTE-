@@ -1,20 +1,18 @@
 # ═══════════════════════════════════════════════════════════════
 #   RAFIN TxT — EMOTE WEB SERVER (FULL)
-#   টিম কোড + UID + ইমোট ID → লবিতে ইমোট চালাবে
-#   TCP Send Layer সহ
 # ═══════════════════════════════════════════════════════════════
 
 import asyncio
 import time
 import os
-import struct
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-# ─── আপনার বিদ্যমান মডিউল ───
-from main import do_login
+# ─── এখানে আপনার লগইন মডিউলটির নাম দিন ───
+# যদি আপনার লগইন ফাইলের নাম login_core.py হয়:
+from login_core import do_login 
 from xC4 import Emote_k, JoinSquadByTeamCode
 
 app = FastAPI(title="RAFIN TxT Emote Web")
@@ -23,6 +21,7 @@ app = FastAPI(title="RAFIN TxT Emote Web")
 #              ★ কনফিগারেশন ★
 # ═══════════════════════════════════════════════════════════════
 
+# ⚠️ নিরাপত্তার জন্য পাসওয়ার্ড সরাসরি কোডে না রেখে Render-এর Environment Variables-এ রাখুন
 BOT_UID      = os.getenv("BOT_UID", "8457240655")
 BOT_PASSWORD = os.getenv("BOT_PASSWORD", "5c131298d384fb6873713e199e80bb2600993f370f1b1618f70f391417723483")
 BOT_REGION   = os.getenv("BOT_REGION", "BD")
@@ -51,7 +50,6 @@ async def get_bot_session():
 # ═══════════════════════════════════════════════════════════════
 
 def build_auth_packet(account_uid, token, timestamp, key, iv):
-    """Online auth প্যাকেট (opcode 0x830c)"""
     if isinstance(key, str):
         key = bytes.fromhex(key)
     if isinstance(iv, str):
@@ -71,7 +69,6 @@ def build_auth_packet(account_uid, token, timestamp, key, iv):
 # ═══════════════════════════════════════════════════════════════
 
 async def send_packets_tcp(sess, packets: list, wait_between=0.5):
-    """একাধিক প্যাকেট একই TCP কানেকশনে পাঠায়"""
     ip = sess["online_ip"]
     port = int(sess["online_port"])
 
@@ -83,7 +80,6 @@ async def send_packets_tcp(sess, packets: list, wait_between=0.5):
         return False, f"TCP কানেকশন ব্যর্থ: {e}"
 
     try:
-        # ১) Auth packet
         auth = build_auth_packet(
             sess["bot_uid"], sess["token"],
             sess["timestamp"], sess["key"], sess["iv"]
@@ -92,7 +88,6 @@ async def send_packets_tcp(sess, packets: list, wait_between=0.5):
         await writer.drain()
         await asyncio.sleep(0.8)
 
-        # ২) বাকি প্যাকেটগুলো
         for pkt in packets:
             if pkt is None:
                 continue
@@ -186,14 +181,6 @@ HTML_PAGE = """
   }
   .ok  { background: rgba(46,213,115,0.15); border: 1px solid #2ed573; color: #2ed573; }
   .err { background: rgba(255,71,87,0.15);  border: 1px solid #ff4757; color: #ff4757; }
-  .info { color: #8b9dc3; font-size: 11px; margin-top: 8px; }
-  .loader {
-    display: inline-block; width: 14px; height: 14px;
-    border: 2px solid #111; border-top-color: transparent;
-    border-radius: 50%; animation: spin 0.7s linear infinite;
-    vertical-align: middle; margin-right: 8px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
   .footer { text-align:center; color:#666; font-size:11px; margin-top:22px; }
 </style>
 </head>
@@ -227,7 +214,7 @@ const res  = document.getElementById('result');
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   btn.disabled = true;
-  btn.innerHTML = '<span class="loader"></span>পাঠানো হচ্ছে...';
+  btn.innerHTML = 'পাঠানো হচ্ছে...';
   res.style.display = 'none';
 
   const fd = new FormData(form);
@@ -284,15 +271,12 @@ async def send_emote(
         raise HTTPException(400, "ইমোট ID শুধু সংখ্যা হবে")
 
     try:
-        # ১) বট লগইন
         sess = await get_bot_session()
 
-        # ২) স্কোয়াড জয়েন প্যাকেট
         join_pkt = await JoinSquadByTeamCode(
             team_code, sess["key"], sess["iv"], sess["region"]
         )
 
-        # ৩) ইমোট প্যাকেট
         emote_pkt = await Emote_k(
             int(target_uid),
             int(emote_id),
@@ -301,7 +285,6 @@ async def send_emote(
             sess["region"],
         )
 
-        # ৪) TCP দিয়ে পাঠানো — join আগে, emote পরে
         ok, msg = await send_packets_tcp(
             sess,
             [join_pkt, emote_pkt],
@@ -319,7 +302,6 @@ async def send_emote(
             "message": (
                 f"টিম <b>{team_code}</b> এ জয়েন করা হয়েছে<br>"
                 f"UID <b>{target_uid}</b> → ইমোট <b>{emote_id}</b> পাঠানো হয়েছে<br>"
-                f"<span style='font-size:11px;opacity:0.8'>লবিতে ২-৩ সেকেন্ডের মধ্যে ইমোট দেখা যাবে</span>"
             ),
         })
 
@@ -327,10 +309,6 @@ async def send_emote(
         raise
     except Exception as e:
         raise HTTPException(500, f"সার্ভার এরর: {e}")
-
-# ═══════════════════════════════════════════════════════════════
-#              ★ হেলথ ★
-# ═══════════════════════════════════════════════════════════════
 
 @app.get("/health")
 async def health():
